@@ -1,0 +1,312 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ui version="4.0">
+ <class>MainWindow</class>
+ <widget class="QMainWindow" name="MainWindow">
+  <property name="geometry">
+   <rect>
+    <x>0</x>
+    <y>0</y>
+    <width>800</width>
+    <height>715</height>
+   </rect>
+  </property>
+  <property name="windowTitle">
+   <string>AVR Debugger</string>
+  </property>
+  <property name="unifiedTitleAndToolBarOnMac">
+   <bool>true</bool>
+  </property>
+  <widget class="QWidget" name="centralwidget">
+   <layout class="QGridLayout" name="gridLayout_3">
+    <item row="0" column="0">
+     <widget class="QSplitter" name="splitterHorizontal">
+      <property name="orientation">
+       <enum>Qt::Horizontal</enum>
+      </property>
+      <widget class="QSplitter" name="splitterVertical">
+       <property name="orientation">
+        <enum>Qt::Vertical</enum>
+       </property>
+       <widget class="QSplitter" name="splitterRegStr">
+        <property name="orientation">
+         <enum>Qt::Horizontal</enum>
+        </property>
+        <widget class="QPlainTextEdit" name="plainTextEditRegisters">
+         <property name="font">
+          <font>
+           <family>Andale Mono</family>
+           <pointsize>10</pointsize>
+          </font>
+         </property>
+         <property name="lineWrapMode">
+          <enum>QPlainTextEdit::NoWrap</enum>
+         </property>
+        </widget>
+        <widget class="QPlainTextEdit" name="plainTextEditStrings">
+         <property name="font">
+          <font>
+           <family>Andale Mono</family>
+           <pointsize>10</pointsize>
+          </font>
+         </property>
+         <property name="lineWrapMode">
+          <enum>QPlainTextEdit::NoWrap</enum>
+         </property>
+        </widget>
+       </widget>
+       <widget class="QGroupBox" name="groupBoxMemory">
+        <property name="title">
+         <string>Memory</string>
+        </property>
+        <layout class="QGridLayout" name="gridLayoutMemory">
+         <property name="margin">
+          <number>5</number>
+         </property>
+         <item row="0" column="0">
+          <layout class="QGridLayout" name="gridLayoutMemoryBox">
+           <item row="0" column="0">
+            <widget class="QLabel" name="labelSection">
+             <property name="text">
+              <string>Section:</string>
+             </property>
+            </widget>
+           </item>
+           <item row="0" column="1">
+            <widget class="QComboBox" name="comboBoxSection">
+             <property name="sizePolicy">
+              <sizepolicy hsizetype="Expanding" vsizetype="Fixed">
+               <horstretch>0</horstretch>
+               <verstretch>0</verstretch>
+              </sizepolicy>
+             </property>
+            </widget>
+           </item>
+           <item row="1" column="0" colspan="2">
+            <widget class="QPlainTextEdit" name="plainTextEditMemory">
+             <property name="font">
+              <font>
+               <family>Andale Mono</family>
+               <pointsize>10</pointsize>
+              </font>
+             </property>
+             <property name="lineWrapMode">
+              <enum>QPlainTextEdit::NoWrap</enum>
+             </property>
+            </widget>
+           </item>
+          </layout>
+         </item>
+        </layout>
+       </widget>
+      </widget>
+     </widget>
+    </item>
+   </layout>
+  </widget>
+  <widget class="QMenuBar" name="menubar">
+   <property name="geometry">
+    <rect>
+     <x>0</x>
+     <y>0</y>
+     <width>800</width>
+     <height>22</height>
+    </rect>
+   </property>
+   <widget class="QMenu" name="menuDebug">
+    <property name="title">
+     <string>Debug</string>
+    </property>
+    <addaction name="actionStart"/>
+    <addaction name="actionPause"/>
+    <addaction name="actionTerminate"/>
+    <addaction name="actionStepInto"/>
+    <addaction name="actionStepOver"/>
+    <addaction name="actionStepReturn"/>
+    <addaction name="separator"/>
+    <addaction name="actionSetStartAddress"/>
+    <addaction name="actionChangeRegisterValue"/>
+    <addaction name="actionMemoryManager"/>
+   </widget>
+   <addaction name="menuDebug"/>
+  </widget>
+  <widget class="QStatusBar" name="statusbar"/>
+  <widget class="QToolBar" name="toolBar">
+   <property name="windowTitle">
+    <string>toolBar</string>
+   </property>
+   <property name="iconSize">
+    <size>
+     <width>16</width>
+     <height>16</height>
+    </size>
+   </property>
+   <attribute name="toolBarArea">
+    <enum>TopToolBarArea</enum>
+   </attribute>
+   <attribute name="toolBarBreak">
+    <bool>false</bool>
+   </attribute>
+   <addaction name="actionStart"/>
+   <addaction name="actionPause"/>
+   <addaction name="actionTerminate"/>
+   <addaction name="separator"/>
+   <addaction name="actionStepInto"/>
+   <addaction name="actionStepOver"/>
+   <addaction name="actionStepReturn"/>
+   <addaction name="separator"/>
+   <addaction name="actionSetStartAddress"/>
+   <addaction name="actionChangeRegisterValue"/>
+   <addaction name="actionMemoryManager"/>
+  </widget>
+  <action name="actionStart">
+   <property name="icon">
+    <iconset>
+     <normalon>:/images/icons/enabled/resume_co.gif</normalon>
+    </iconset>
+   </property>
+   <property name="text">
+    <string>Start / Resume</string>
+   </property>
+   <property name="toolTip">
+    <string>Start / Resume</string>
+   </property>
+   <property name="shortcut">
+    <string>F5</string>
+   </property>
+  </action>
+  <action name="actionStepInto">
+   <property name="enabled">
+    <bool>false</bool>
+   </property>
+   <property name="icon">
+    <iconset>
+     <normalon>:/images/icons/enabled/stepinto_co.gif</normalon>
+    </iconset>
+   </property>
+   <property name="text">
+    <string>Step Into</string>
+   </property>
+   <property name="toolTip">
+    <string>Step Into</string>
+   </property>
+   <property name="shortcut">
+    <string>F8</string>
+   </property>
+  </action>
+  <action name="actionStepOver">
+   <property name="enabled">
+    <bool>false</bool>
+   </property>
+   <property name="icon">
+    <iconset>
+     <normalon>:/images/icons/enabled/stepover_co.gif</normalon>
+    </iconset>
+   </property>
+   <property name="text">
+    <string>Step Over</string>
+   </property>
+   <property name="toolTip">
+    <string>Step Over</string>
+   </property>
+  </action>
+  <action name="actionStepReturn">
+   <property name="enabled">
+    <bool>false</bool>
+   </property>
+   <property name="icon">
+    <iconset>
+     <normalon>:/images/icons/enabled/stepreturn_co.gif</normalon>
+    </iconset>
+   </property>
+   <property name="text">
+    <string>Step Return</string>
+   </property>
+   <property name="toolTip">
+    <string>Step Return</string>
+   </property>
+  </action>
+  <action name="actionTerminate">
+   <property name="enabled">
+    <bool>false</bool>
+   </property>
+   <property name="icon">
+    <iconset>
+     <normalon>:/images/icons/enabled/terminate_co.gif</normalon>
+    </iconset>
+   </property>
+   <property name="text">
+    <string>Terminate</string>
+   </property>
+   <property name="toolTip">
+    <string>Terminate</string>
+   </property>
+  </action>
+  <action name="actionSetStartAddress">
+   <property name="icon">
+    <iconset resource="debugavr.qrc">
+     <normaloff>:/images/icons/enabled/goto_input.gif</normaloff>:/images/icons/enabled/goto_input.gif</iconset>
+   </property>
+   <property name="text">
+    <string>Set Start Address...</string>
+   </property>
+  </action>
+  <action name="actionPause">
+   <property name="enabled">
+    <bool>false</bool>
+   </property>
+   <property name="icon">
+    <iconset resource="debugavr.qrc">
+     <normaloff>:/images/icons/enabled/suspend_co.gif</normaloff>:/images/icons/enabled/suspend_co.gif</iconset>
+   </property>
+   <property name="text">
+    <string>Pause</string>
+   </property>
+   <property name="toolTip">
+    <string>Pause</string>
+   </property>
+  </action>
+  <action name="actionChangeRegisterValue">
+   <property name="enabled">
+    <bool>false</bool>
+   </property>
+   <property name="icon">
+    <iconset resource="debugavr.qrc">
+     <normaloff>:/images/icons/enabled/register_obj.gif</normaloff>:/images/icons/enabled/register_obj.gif</iconset>
+   </property>
+   <property name="text">
+    <string>Change Register Value...</string>
+   </property>
+   <property name="toolTip">
+    <string>Change Register Value</string>
+   </property>
+  </action>
+  <action name="actionRunToLine">
+   <property name="icon">
+    <iconset resource="debugavr.qrc">
+     <normaloff>:/images/icons/enabled/runtoline_co.gif</normaloff>:/images/icons/enabled/runtoline_co.gif</iconset>
+   </property>
+   <property name="text">
+    <string>Run To Line</string>
+   </property>
+   <property name="toolTip">
+    <string>Run To Line</string>
+   </property>
+  </action>
+  <action name="actionMemoryManager">
+   <property name="icon">
+    <iconset resource="debugavr.qrc">
+     <normaloff>:/images/icons/enabled/memory_update.gif</normaloff>:/images/icons/enabled/memory_update.gif</iconset>
+   </property>
+   <property name="text">
+    <string>Memory Manager...</string>
+   </property>
+   <property name="toolTip">
+    <string>Memory Manager</string>
+   </property>
+  </action>
+ </widget>
+ <resources>
+  <include location="debugavr.qrc"/>
+ </resources>
+ <connections/>
+</ui>

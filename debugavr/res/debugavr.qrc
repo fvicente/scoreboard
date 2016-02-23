@@ -1,0 +1,18 @@
+<RCC>
+  <qresource prefix="images">
+    <file>icons/enabled/change_reg_value_co.gif</file>
+    <file>icons/enabled/goto_input.gif</file>
+    <file>icons/enabled/memory_update.gif</file>
+    <file>icons/enabled/runtoline_co.gif</file>
+    <file>icons/enabled/brkp_obj.gif</file>
+    <file>icons/enabled/exec_dbg_obj.gif</file>
+    <file>icons/enabled/inst_ptr_top.gif</file>
+    <file>icons/enabled/register_obj.gif</file>
+    <file>icons/enabled/resume_co.gif</file>
+    <file>icons/enabled/stepinto_co.gif</file>
+    <file>icons/enabled/stepover_co.gif</file>
+    <file>icons/enabled/stepreturn_co.gif</file>
+    <file>icons/enabled/suspend_co.gif</file>
+    <file>icons/enabled/terminate_co.gif</file>
+  </qresource>
+</RCC>
