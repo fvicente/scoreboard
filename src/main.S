@@ -14,12 +14,10 @@
 ;********************************************************************
 
 ; To run at 20MHz we need an external oscillator, that will take PB2 and PB3.
-; TODO: Using an external clock (a crystal that generates TTL) we can save PB2!
 ; We still have 4 pins available, PB0 and PB1 will be used for the VGA HSYNC and
 ; VSYNC respectively, PB2 to generate the RGB (only black and white!).
-; PB5 to get the input information that we want to display, hopefully this will
-; come from a bluetooth module specially tuned for this, or from another ATtiny
-; in the worst case.
+; PB5 to get the input information that we want to display this comes from the TXD_UART pin of
+; a bluetooth module configured at 2400,N,0
 
 ;
 ;                      ATtiny45
@@ -46,22 +44,20 @@
 
 #include <avr/io.h>
 
-	.global maplines1
-	.global maplines2
+	.global maplines
 	.global jmptable
-	.global number0
-	.global number1
-	.global number2
-	.global number3
-	.global number4
-	.global number5
-	.global number6
-	.global number7
-	.global number8
-	.global number9
-	.global space
-	.global zerobyte
+	.global numtable
 	.global main
+
+; MACROS
+
+.macro delay3x val
+	ldi r16, \val
+1:
+	dec r16
+	brne 1b
+.endm
+
 
 ; Extract from http://www.linusakesson.net/scene/craft/
 
@@ -123,6 +119,25 @@
 ; More VGA timing info:
 ; http://courses.engr.illinois.edu/ece412/MP_files/mp3/vga_timing.pdf
 
+; About UART
+; Running at 2400 bauds, one bit with last for 416.66μs
+; Our loop will read the input every 635 cycles to keep the VGA horizontal frequency, this means
+; every 31.75μs at 20Mhz, so 416.66 / 31.75 = 13.12, meaning each bit will be read about 13 times.
+; We will take the read #7 as the valid one. We wont do any kind of checks.
+
+; From the UART we expect to receive one byte, every byte is a command
+; Valid commands:
+; 0 0 0 1 D D D D		(character 1) [0-F] -> 0 1 2 3 4 5 6 7 8 9 (SPACE) B O G
+; 0 0 1 0 D D D D		(character 2)
+; 0 0 1 1 D D D D		(character 3)
+; 0 1 0 0 D D D D		(character 4)
+; 0 1 0 1 0 0 0 1		(serve A top)
+; 0 1 0 1 0 0 1 0		(serve B bottom)
+; 0 1 0 1 0 1 0 0		(serve A top)
+; 0 1 0 1 1 0 0 0		(serve b bottom)
+
+; More UART info at http://en.wikipedia.org/wiki/Universal_asynchronous_receiver/transmitter
+
 ;
 ; NOTES:
 ;
@@ -149,47 +164,41 @@ main:
 
 	; Initialize ports
 
-	sbi DDRB, 0x00	; output
-	sbi DDRB, 0x01	; output
-	sbi DDRB, 0x02	; output
+	sbi _SFR_IO_ADDR(DDRB), 0x00	; output
+	sbi _SFR_IO_ADDR(DDRB), 0x01	; output
+	sbi _SFR_IO_ADDR(DDRB), 0x02	; output
+	cbi _SFR_IO_ADDR(DDRB), INPUT	; make input
 
-	; Initialize used registers
+	; Initialize registers
 
 	ldi r16, 0x00		; aux
-	ldi r17, 0x00		; aux
-	ldi r18, 0x00		; temporary for delays
-	ldi r19, 0x00		; blank line indicator
-
-	ldi r20, 0xFF		; line counter
-	ldi r21, 0x02		; line counter * 256
-
+	ldi r17, 0x00		; mapped line (between 0 and 11)
+	ldi r18, 0x00		; aux to read input
+	ldi r19, 0x00		; byte read from UART
+	ldi r20, 0x00		; line counter - 0x00 = first half of the 480 visible lines
+						;                0x01 = second half of the 480 visible lines
+						;                0x02 = 45 non-visible lines
+						;
+	ldi r21, 0xFF		; line counter - from 0x00 to 0xF0 if r20 in (0x00, 0x01)
+						;                from 0x00 to 0x2D if r20 == 0x02
+						;
 	ldi r22, 0x00		; ZERO
-
-	ldi r23, 0x00		;
-
-	ldi r24, 0x00		; return address aux 1
-	ldi r25, 0x00		; return address aux 2
+	ldi r23, 0x00		; character line data 1
+	ldi r24, 0x00		; character line data 4
+	ldi r25, 0x00		; UART input counter -	bit 0 to 3 = read counter (resets at 14)
+						;						bit 4 to 7 = bits counter (resets when == 0x91)
+						; 0x00000000 means waiting for start bit (low)
+						;
+	ldi r26, 0x00		; current player
+	ldi r27, 0x00		; current line Y
 
 	mov r1, r22			; number to display from 0 to 9 - 10 = space
 	mov r2, r22			; number to display from 0 to 9 - 10 = space
 	mov r3, r22			; number to display from 0 to 9 - 10 = space
 	mov r4, r22			; number to display from 0 to 9 - 10 = space
 
-	mov r5, r22			; character line data
-	mov r6, r22			; character line data
-	mov r7, r22			; character line data
-	mov r8, r22			; character line data
-
-	; TODO: following lines are to add some default values for tests
-	ldi r16, 0x06
-	mov r1, r16
-	ldi r16, 0x0c
-	mov r2, r16
-	ldi r16, 0x12
-	mov r3, r16
-	ldi r16, 0x18
-	mov r4, r16
-	ldi r16, 0x00
+	mov r6, r22			; character line data 2
+	mov r7, r22			; character line data 3
 
 loop:
 	;
@@ -197,60 +206,47 @@ loop:
 	;
 
 	; Front porch 0.94 µs = 18.8 cycles
-	; Use the front porch cycles to determine r17
-	; r17 is the character line number (between 1 and 10) mapped on the maplines
 
-	; check counters
-	; if r21 == 2 we may be inside the drawing zone
-	; if r21 == 1 we may be inside the drawing / vertical blanking zone
-	; if r21 == 0 we may need to reset the counters
+	; check line counters
 
-	cpi r21, 0x02		; cpi = 1 clock
-	breq chkline		; brne = 1 clock if cond == false else 2
+	; first check vertical blanking zone
+	cpi r20, 0x02
+	breq vzone
 
-	cpi r21, 0x01		; cpi = 1 clock
-	brne resetorgo		; if true, this means that r21 == 0
-
-	; we use the line counters to determine when to turn the VSYNC pulse on and off
-	; if line == 491 turn VSYNC pulse on
-
-	cpi r20, 0x15		; cpi = 1 clock
-	breq vpulseon		; exactly 491 lines; breq = 1 clock if cond == false else 2
-
-	cpi r20, 0x13		; cpi = 1 clock
-	breq vpulseoff		; exactly 493 lines; brne = 1 clock if cond == false else 2
-
-	mov r16, r20		; mov = 1 clock
-	cpi r16, 0x51		; sub = 1 clock
-	brlo fp7togo		; brlo = 1 clock if cond == false else 2
-
-	com r16
-	ldi ZL, lo8(maplines2)
-	ldi ZH, hi8(maplines2)
-	add ZL, r16			; add = 1 clock
+	; increment counter
+	inc r21
+	; determine current line
+	ldi ZL, lo8(maplines)
+	ldi ZH, hi8(maplines)
+	add ZL, r21
 	adc ZH, r22
-	nop
+	lpm				; lpm = 3 cycles
+	mov r27, r0
+	; increment r20 if necessary
+	cpi r21, 0xF0
+	brne checkline
+	; we're starting the lower half part of the screen
+	inc r20
+	ldi r21, 0x00
+	sbrc r20, 1
+	ldi r27, 0x60
 	rjmp hsyncstart
+
+vzone:
+	inc r21
+	cpi r21, 0x2D
+	breq cntreset
+
+	cpi r21, 0x09
+	breq vpulseon		; line 10 of the blanking zone
+
+	cpi r21, 0x0B
+	brne fp8togo
+	breq vpulseoff		; line 12 of the blanking zone
 
 vpulseon:
 	sbi PORT, VSYNC		; sbi = 2 clocks
-	rjmp fp8togo
-
-vpulseoff:
-	cbi PORT, VSYNC		; turn VSYNC pulse off; cbi = 2 clocks
-	rjmp fp6togo
-
-chkline:
-	cpi r20, 0xCC		; cpi = 1 clock
-	brsh fp13togo		; brsh = 1 clock if cond == false else 2
-
-	mov r16, r20
-	subi r16, 0xCC
-	com r16
-	ldi ZL, lo8(maplines1)
-	ldi ZH, hi8(maplines1)
-	add ZL, r16
-	adc ZH, r22
+	nop
 	nop
 	nop
 	nop
@@ -258,88 +254,224 @@ chkline:
 	nop
 	rjmp hsyncstart
 
-resetorgo:
-	; we have 14 cycles to check and reset or continue
-	; if line == 526
-	cpi r20, 0xF1		; cpi = 1 clock
-	brne fp11togo		; not 526 lines; brne = 1 clock if cond == false else 2
-	; reset to line counter to 0
-	ldi r20, 0xFF		; line counter; ldi = 1 clock
-	ldi r21, 0x02		; line counter * 256; ldi = 1 clock
+vpulseoff:
+	cbi PORT, VSYNC		; turn VSYNC pulse off; cbi = 2 clocks
+	nop
+	nop
+	nop
+	rjmp hsyncstart
+
+cntreset:
+	ldi r20, 0x00
+	ldi r21, 0x00
 	rjmp fp8togo
-
-fp13togo:
-	nop
-	nop
-
-fp11togo:
-	nop
-	nop
-	nop
 
 fp8togo:
 	nop
-
-fp7togo:
 	nop
 
 fp6togo:
 	nop
 	nop
-	; to enforce the lpm return 0
-	ldi ZL, lo8(zerobyte)
-	ldi ZH, hi8(zerobyte)
+	nop
+	nop
 	rjmp hsyncstart
+
+checkline:
+	; check if we're on the lower half of the screen
+	cpi r20, 0x01
+	breq addandgo
+	nop
+	rjmp hsyncstart
+
+addandgo:
+	; add offset to r27 - only 2 cycles left
+	ldi r16, 0x30
+	add r27, r16
+	; fall thru
 
 hsyncstart:
 	; Sync pulse length 3.77 µs = 75.4 cycles
 	; HSYNC pulse on
 	sbi PORT, HSYNC		; sbi = 2 clocks
 
-	lpm
-	mov r17, r0
-	; r17 has the character line (from 1 to 10)
-	; We have 71 cycles to set R5, R6, R7 and R8
-	; Each of this registers represents 1/4 of the line to paint
-	; according to the current characters in R1, R2, R3 and R4
+	mov r16, r27		; current line (between 0 and 96)
+	; divide by 8 to get the mapped line number (between 0 and 11)
+	lsr r16
+	lsr r16
+	lsr r16
+	mov r17, r16
+	; skip first line and ensure to ignore lines below 8
+	dec r16
+	cpi r16, 9
+	brlo getchars
+	ldi r16, 0			; first line is always empty
 
-getlines:
-	; use r16 as parameter for our function that retrieves the line (in r0)
-	mov r16, r1
-	rcall getlinefornum
-	mov r5, r0			; store result
-	mov r16, r2
-	rcall getlinefornum
-	mov r6, r0			; store result
-	mov r16, r3
-	rcall getlinefornum
+getchars:
+	; get 1st character
+	ldi ZL, lo8(numtable)
+	ldi ZH, hi8(numtable)
+	add ZL, r1
+	adc ZH, r22
+	add ZL, r16
+	adc ZH, r22
+	lpm
+	mov r23, r0
+
+	; get 2nd character
+	ldi ZL, lo8(numtable)
+	ldi ZH, hi8(numtable)
+	add ZL, r2
+	adc ZH, r22
+	add ZL, r16
+	adc ZH, r22
+	lpm
+	mov r6, r0
+
+	; get 3rd character
+	ldi ZL, lo8(numtable)
+	ldi ZH, hi8(numtable)
+	add ZL, r3
+	adc ZH, r22
+	add ZL, r16
+	adc ZH, r22
+	lpm
+	mov r7, r0
+
+	; get 4th character
+	ldi ZL, lo8(numtable)
+	ldi ZH, hi8(numtable)
+	add ZL, r4
+	adc ZH, r22
+	add ZL, r16
+	adc ZH, r22
+	lpm
+	mov r24, r0
+
+	; 51 cycles
+
+	;
+	; UART read input
+	;
+	in r18, _SFR_IO_ADDR(PINB)		; 1 clock
+
+	cpi r25, 0
+	breq waitlow
+	inc r25
+	mov r16, r25
+	andi r16, 0x0F
+	cpi r16, 7
+	brne chkfornext5togo
+	lsr r19
+	sbrc r18, INPUT
+	ori r19, 0x80
+	nop
+	rjmp chkfornext
+chkfornext5togo:
 	nop
 	nop
 	nop
-	; 74 cycles used - we will need to get the last line during the back porch
+	nop
+	nop
+chkfornext:
+	; 65 cycles
+	cpi r16, 14
+	brne chkend3togo
+	subi r25, 0xEF	; add 17
+	andi r25, 0xF1
+	rjmp chkend
+chkend3togo:
+	nop
+	nop
+	nop
+chkend:
+	; 71 cycles
+	nop
+	rjmp hsyncoff
+
+waitlow:
+	; waiting for low
+	sbrs r18, INPUT
+	inc r25
+	nop
+	delay3x 4
+	nop
+	nop
+	rjmp hsyncoff
+
+hsyncoff:
+	; 74 cycles
 
 	; HSYNC pulse off
 	cbi PORT, HSYNC		; cbi = 2 clocks
 
 	; Back porch 1.89 µs = 37.8 cycles
-	; We use the back porch cycles to determine if we need to draw a blank line or a number line
+	; We use the back to process the read byte from UART
 
-	mov r7, r0			; store result
-	mov r16, r4
-	rcall getlinefornum
-	mov r8, r0			; store result
-	; 15 cycles left
+	cpi r25, 0x91
+	brne endbackporch25togo		; nothing read
+procbyte:
+	; byte just read, process it
+	mov r16, r19
+	swap r16
+	andi r16, 0x0F
+	andi r19, 0x0F
+	; multiply by 8
+	lsl r19
+	lsl r19
+	lsl r19
+	;
+	cpi r16, 0x01	; set charater 1
+	brne chkchar2
+	mov r1, r19
+chkchar2:
+	cpi r16, 0x02	; set charater 2
+	brne chkchar3
+	mov r2, r19
+chkchar3:
+	cpi r16, 0x03	; set charater 3
+	brne chkchar4
+	mov r3, r19
+chkchar4:
+	cpi r16, 0x04	; set charater 4
+	brne cmdplayer
+	mov r4, r19
+cmdplayer:
+	cpi r16, 0x05	; set current player
+	brne endprocbyte
+	mov r26, r19
+endprocbyte:
+	ldi r19, 0x00
+	ldi r25, 0x00
+	rjmp endbackporch
+
+endbackporch25togo:
+	delay3x 8
+	nop
+
+endbackporch:
+	; 28 cycles of back porch
 	; RGB off
 	cbi PORT, RGB		; cbi = 2 clocks
+
+	cpi r17, 1
+	brne chkpl3
+	sbrc r26, 3
+	ori r23, 0x80		; player 1 selected
+	sbrc r26, 4
+	ori r24, 0x02		; player 2 selected
 	nop
+	rjmp line
+
+line3togo:
 	nop
-	nop
-	nop
-	nop
-	nop
-	nop
-	nop
-	nop
+	rjmp line
+
+chkpl3:
+	cpi r17, 9
+	brne line3togo
+	sbrc r26, 5
+	ori r23, 0x80		; player 3 selected
 	nop
 	nop
 
@@ -348,21 +480,10 @@ line:
 	; Draw a line of pixels total: 25.17 µs * 20 = 503.4 cycles
 	;
 
-	nop
-	nop
-	nop
-	nop
-	nop
-	nop
-	nop
-	nop
-	nop
-	nop
-	nop
 	; draw 1st 1/4 line
 	ldi r16, 0x08
 line14:
-	rol r5
+	rol r23
 	brcc rgboff14
 	nop
 	; RGB on
@@ -405,6 +526,37 @@ cont24:
 	nop
 	brne line24
 
+	; middle separation (checking player 4)
+	cpi r17, 9
+	brne drawsep
+	nop
+	nop
+	nop
+	sbi PORT, RGB		; RGB on
+	sbrc r26, 6
+	ori r24, 0x02		; player 4 selected
+	nop
+	cbi PORT, RGB		; RGB off
+	nop
+	nop
+	nop
+	rjmp contline
+
+drawsep:
+	; middle separation (no player checking)
+	nop
+	nop
+	sbi PORT, RGB		; RGB on
+	nop
+	nop
+	nop
+	cbi PORT, RGB		; RGB off
+	nop
+	nop
+	nop
+	rjmp contline
+
+contline:
 	; draw 1st 3/4 line
 	ldi r16, 0x08
 line34:
@@ -431,7 +583,7 @@ cont34:
 	; draw 1st 4/4 line
 	ldi r16, 0x08
 line44:
-	rol r8
+	rol r24
 	brcc rgboff44
 	nop
 	; RGB on
@@ -454,118 +606,4 @@ cont44:
 	; ending line
 	nop
 	nop
-	nop
-	nop
-	rjmp decandgo	; decandgo will use 6 cycles
-
-decandgo:
-	; decrement line counters
-	dec r20				; decrement line counter; dec = 1 clock
-	brne back			; if not zero, repeat loop; brne = 1 clock if cond == false else 2
-	ldi r20, 0xFF		; reset line counter
-	dec r21				; decrement line counter * 256
 	rjmp loop
-
-back:
-	nop					; nop = 1 clock
-	rjmp loop
-
-;
-; functions
-;
-getlinefornum:
-	ldi ZL, lo8(pm(numtable))
-	ldi ZH, hi8(pm(numtable))
-	add ZL, r16
-	adc ZH, r22
-	ijmp
-
-numtable:
-
-linefor0:
-	ldi ZL, lo8(number0)
-	ldi ZH, hi8(number0)
-	add ZL, r17
-	adc ZH, r22
-	lpm
-	ret
-
-linefor1:
-	ldi ZL, lo8(number1)
-	ldi ZH, hi8(number1)
-	add ZL, r17
-	adc ZH, r22
-	lpm
-	ret
-
-linefor2:
-	ldi ZL, lo8(number2)
-	ldi ZH, hi8(number2)
-	add ZL, r17
-	adc ZH, r22
-	lpm
-	ret
-
-linefor3:
-	ldi ZL, lo8(number3)
-	ldi ZH, hi8(number3)
-	add ZL, r17
-	adc ZH, r22
-	lpm
-	ret
-
-linefor4:
-	ldi ZL, lo8(number4)
-	ldi ZH, hi8(number4)
-	add ZL, r17
-	adc ZH, r22
-	lpm
-	ret
-
-linefor5:
-	ldi ZL, lo8(number5)
-	ldi ZH, hi8(number5)
-	add ZL, r17
-	adc ZH, r22
-	lpm
-	ret
-
-linefor6:
-	ldi ZL, lo8(number6)
-	ldi ZH, hi8(number6)
-	add ZL, r17
-	adc ZH, r22
-	lpm
-	ret
-
-linefor7:
-	ldi ZL, lo8(number7)
-	ldi ZH, hi8(number7)
-	add ZL, r17
-	adc ZH, r22
-	lpm
-	ret
-
-linefor8:
-	ldi ZL, lo8(number8)
-	ldi ZH, hi8(number8)
-	add ZL, r17
-	adc ZH, r22
-	lpm
-	ret
-
-linefor9:
-	ldi ZL, lo8(number9)
-	ldi ZH, hi8(number9)
-	add ZL, r17
-	adc ZH, r22
-	lpm
-	ret
-
-lineforspace:
-	ldi ZL, lo8(space)
-	ldi ZH, hi8(space)
-	add ZL, r17
-	adc ZH, r22
-	lpm
-	ret
